@@ -20,18 +20,29 @@ jobs:
 
       - name: Add NuGet sources
         run: |
-          dotnet nuget add source https://api.nuget.org/v3/index.json \
-            --name nuget.org --skip-duplicate
-          dotnet nuget add source https://nuget.bepinex.dev/v3/index.json \
-            --name BepInEx --skip-duplicate
-          dotnet nuget add source https://nuget.samboy.dev/v3/index.json \
-            --name samboy --skip-duplicate
-          dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
-            --name GitHub-csh \
-            --username cali-magnum \
-            --password ${{ secrets.GITHUB_TOKEN }} \
-            --skip-duplicate
-            
+          # Only add nuget.org if it isn't already present
+          if ! dotnet nuget list source | grep -q 'https://api.nuget.org/v3/index.json'; then
+            dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
+          fi
+
+          # Only add BepInEx feed if missing
+          if ! dotnet nuget list source | grep -q 'https://nuget.bepinex.dev/v3/index.json'; then
+            dotnet nuget add source https://nuget.bepinex.dev/v3/index.json --name BepInEx
+          fi
+
+          # Only add samboy feed if missing
+          if ! dotnet nuget list source | grep -q 'https://nuget.samboy.dev/v3/index.json'; then
+            dotnet nuget add source https://nuget.samboy.dev/v3/index.json --name samboy
+          fi
+
+          # Only add GitHub-csh feed if missing
+          if ! dotnet nuget list source | grep -q 'https://nuget.pkg.github.com/csh/index.json'; then
+            dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
+              --name GitHub-csh \
+              --username cali-magnum \
+              --password "${{ secrets.GITHUB_TOKEN }}"
+          fi
+
       - name: Restore dependencies
         run: dotnet restore BetterCamera/BetterCamera.csproj
 
