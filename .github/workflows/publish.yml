@@ -26,9 +26,30 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # 1) Create a temp nuget.config so that dotnet restore can authenticate to GitHub Packages
+      - name: Create nuget.config
+        run: |
+          cat > nuget.config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <add key="nuget.org"  value="https://api.nuget.org/v3/index.json" />
+              <add key="BepInEx"    value="https://nuget.bepinex.dev/v3/index.json" />
+              <add key="samboy.dev" value="https://nuget.samboy.dev/v3/index.json" />
+              <add key="GitHub-csh" value="https://nuget.pkg.github.com/csh/index.json" />
+            </packageSources>
+            <packageSourceCredentials>
+              <GitHub-csh>
+                <add key="Username"          value="cali-magnum" />
+                <add key="ClearTextPassword" value="${{ secrets.GITHUB_TOKEN }}" />
+              </GitHub-csh>
+            </packageSourceCredentials>
+          </configuration>
+          EOF
+
+      # 2) Only add the source if our workflow hasn’t already
       - name: Configure GitHub Packages feed
         run: |
-          # only add the csh feed if that URL is not already present
           if ! dotnet nuget list source | grep -Fq 'https://nuget.pkg.github.com/csh/index.json'; then
             dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
               --name github-csh \
@@ -37,9 +58,12 @@ jobs:
               --store-password-in-clear-text
           fi
 
+      # 3) Restore using our nuget.config
       - name: Restore dependencies
-        run: dotnet restore BetterCamera/BetterCamera.csproj
+        run: |
+          dotnet restore BetterCamera/BetterCamera.csproj --configfile nuget.config
 
+      # 4) Build
       - name: Build plugin DLL
         run: |
           dotnet build BetterCamera/BetterCamera.csproj \
@@ -47,9 +71,11 @@ jobs:
             --no-restore \
             /p:Version=${{ env.VERSION }}
 
-      - name: Install tcli (Thunderstore CLI)
+      # 5) Install Thunderstore CLI
+      - name: Install tcli
         run: dotnet tool install --tool-path ./tools tcli
 
+      # 6) Create manifest.json
       - name: Create manifest.json
         run: |
           cat > manifest.json <<EOF
@@ -64,25 +90,29 @@ jobs:
           }
           EOF
 
+      # 7) Package into ZIP
       - name: Create Thunderstore ZIP
-        run: ./tools/tcli build --package-version "${VERSION}"
+        run: |
+          mkdir -p package/BepInEx/plugins
+          cp BetterCamera/bin/Release/BetterCamera.dll package/BepInEx/plugins/
+          cp icon.png LICENSE CHANGELOG.md manifest.json package/
+          cd package
+          zip -r ../BetterCamera-cali-magnum-${VERSION}.zip .
 
+      # 8) Publish to Thunderstore
       - name: Publish to Thunderstore
         run: |
-          if [ -z "${{ secrets.THUNDERSTORE_API_KEY }}" ]; then
-            echo "❌ THUNDERSTORE_API_KEY not set!"
-            exit 1
-          fi
           ./tools/tcli publish \
             --package-version "${VERSION}" \
             --token "${{ secrets.THUNDERSTORE_API_KEY }}"
 
+      # 9) Create GitHub Release with the same ZIP 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
           name: "BetterCamera ${{ env.VERSION }}"
           body_path: CHANGELOG.md
-          files: build/*.zip
+          files: BetterCamera-cali-magnum-${{ env.VERSION }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
