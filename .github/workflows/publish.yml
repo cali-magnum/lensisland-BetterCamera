@@ -86,7 +86,7 @@ jobs:
     # 8) upload to Thunderstore
     - name: Upload to Thunderstore
       run: |
-        curl -X POST "https://thunderstore.io/api/experimental/package/create/" \
+        curl -X POST "https://thunderstore.io/c/lens-island/api/experimental/package/create/" \
              -H "Authorization: ${{ secrets.THUNDERSTORE_API_KEY }}" \
              -F "file=@BetterCamera-cali-magnum-${VERSION}.zip" \
              -F "community=lens-island" \
