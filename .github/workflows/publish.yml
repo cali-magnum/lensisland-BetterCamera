@@ -1,12 +1,12 @@
-name: Publish to Thunderstore
+name: Build and Publish to Thunderstore and GitHub Releases
 
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'   # Only run on tags like 0.0.1, 0.0.2, etc.
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,16 +21,49 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build
+      - name: Build solution
         run: dotnet build --configuration Release --no-restore
 
-      - name: Publish package
+      - name: Create manifest.json
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          cat > manifest.json << EOL
+          {
+            "namespace": "cali_magnum",
+            "name": "BetterCamera",
+            "version_number": "$VERSION",
+            "description": "Removes the ''auto-snap-back'' behavior of the camera pitch and allows more camera control",
+            "website_url": "https://github.com/cali-magnum/lensisland-BetterCamera",
+            "dependencies": [
+              "BepInEx-BepInExPack_LensIsland-5.4.2303"
+            ]
+          }
+          EOL
+
+      - name: Create Thunderstore package
+        run: |
+          mkdir -p package/BepInEx/plugins
+          cp BetterCamera/bin/Release/BetterCamera.dll package/BepInEx/plugins/
+          cp icon.png package/
+          cp LICENSE package/
+          cp manifest.json package/
+          cd package && zip -r ../BetterCamera-cali-magnum-${GITHUB_REF_NAME}.zip .
+
+      - name: Upload to Thunderstore
         uses: GreenTF/upload-thunderstore-package@v2
         with:
           namespace: "cali_magnum"
           name: "BetterCamera"
           version: "${GITHUB_REF_NAME}"
           description: "Removes the ''auto-snap-back'' behavior of the camera pitch and allows more camera control"
-          categories: "mods"
+          categories: "mods,misc,tools"
           communities: "lens-island"
           token: ${{ secrets.THUNDERSTORE_API_KEY }}
+          file: "BetterCamera-cali-magnum-${GITHUB_REF_NAME}.zip"
+
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BetterCamera-cali-magnum-${GITHUB_REF_NAME}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
