@@ -1,0 +1,33 @@
+[general]
+repository = "https://thunderstore.io"
+
+[package]
+namespace     = "cali_magnum"
+name          = "BetterCamera"
+versionNumber = "0.0.1"
+description   = "Removes the ''auto-snap-back'' behavior of the camera pitch and allows more camera control"
+websiteUrl    = "https://github.com/cali-magnum/lensisland-BetterCamera"
+
+[package.dependencies]
+BepInEx-BepInExPack_LensIsland = "5.4.2303"
+
+[build]
+icon = "/icon.png"
+
+[[build.copy]]
+source = "LICENSE"
+target = "LICENSE"
+
+[[build.copy]]
+source = "BetterCamera/bin/Release/BetterCamera.dll"
+target = "BepInEx/plugins/BetterCamera.dll"
+
+[publish]
+categories = [
+  "mods"
+  "misc"
+]
+
+communities = [
+  "lens-island"
+]

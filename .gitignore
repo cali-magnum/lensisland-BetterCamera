@@ -485,3 +485,8 @@ $RECYCLE.BIN/
 
 # Thunderstore CLI
 build
+
+# Ignore all project build artifacts
+**/bin/
+**/obj/
+Nuget.Config

@@ -1,0 +1,36 @@
+name: Publish to Thunderstore
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'   # Only run on tags like 0.0.1, 0.0.2, etc.
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish package
+        uses: GreenTF/upload-thunderstore-package@v2
+        with:
+          namespace: "cali_magnum"
+          name: "BetterCamera"
+          version: "${GITHUB_REF_NAME}"
+          description: "Removes the ''auto-snap-back'' behavior of the camera pitch and allows more camera control"
+          categories: "mods"
+          communities: "lens-island"
+          token: ${{ secrets.THUNDERSTORE_API_KEY }}
