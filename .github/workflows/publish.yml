@@ -20,27 +20,31 @@ jobs:
 
       - name: Add NuGet sources
         run: |
-          # Only add nuget.org if it isn't already present
+          # nuget.org
           if ! dotnet nuget list source | grep -q 'https://api.nuget.org/v3/index.json'; then
-            dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
+            dotnet nuget add source https://api.nuget.org/v3/index.json \
+              --name nuget.org
           fi
 
-          # Only add BepInEx feed if missing
+          # BepInEx feed
           if ! dotnet nuget list source | grep -q 'https://nuget.bepinex.dev/v3/index.json'; then
-            dotnet nuget add source https://nuget.bepinex.dev/v3/index.json --name BepInEx
+            dotnet nuget add source https://nuget.bepinex.dev/v3/index.json \
+              --name BepInEx
           fi
 
-          # Only add samboy feed if missing
+          # samboy.dev feed
           if ! dotnet nuget list source | grep -q 'https://nuget.samboy.dev/v3/index.json'; then
-            dotnet nuget add source https://nuget.samboy.dev/v3/index.json --name samboy
+            dotnet nuget add source https://nuget.samboy.dev/v3/index.json \
+              --name samboy
           fi
 
-          # Only add GitHub-csh feed if missing
+          # GitHub Packages (LensIsland.GameLibs)
           if ! dotnet nuget list source | grep -q 'https://nuget.pkg.github.com/csh/index.json'; then
             dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
               --name GitHub-csh \
               --username cali-magnum \
-              --password "${{ secrets.GITHUB_TOKEN }}"
+              --password "${{ secrets.GH_PACKAGES_TOKEN }}" \
+              --store-password-in-clear-text
           fi
 
       - name: Restore dependencies
@@ -49,7 +53,7 @@ jobs:
       - name: Build project
         run: dotnet build BetterCamera/BetterCamera.csproj --configuration Release --no-restore
 
-      - name: Extract tag version
+      - name: Extract version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF##*/}" >> $GITHUB_ENV
 
@@ -65,30 +69,28 @@ jobs:
           }
           EOF
 
-      - name: Create package zip
+      - name: Create Thunderstore package
         run: |
           mkdir -p package/BepInEx/plugins
           cp BetterCamera/bin/Release/netstandard2.1/BetterCamera.dll package/BepInEx/plugins/
-          cp LICENSE package/
-          cp CHANGELOG.md package/
-          cp manifest.json package/
+          cp LICENSE CHANGELOG.md manifest.json icon.png package/
           cd package
           zip -r ../BetterCamera-cali-magnum-${VERSION}.zip .
 
       - name: Upload to Thunderstore
         run: |
           curl -X POST "https://thunderstore.io/api/experimental/package/create/" \
-          -H "Authorization: ${{ secrets.THUNDERSTORE_API_KEY }}" \
-          -F "file=@BetterCamera-cali-magnum-${VERSION}.zip" \
-          -F "community=Lens-Island" \
-          -F "categories=misc"
+            -H "Authorization: ${{ secrets.THUNDERSTORE_API_KEY }}" \
+            -F "file=@BetterCamera-cali-magnum-${VERSION}.zip" \
+            -F "community=Lens-Island" \
+            -F "categories=mods,misc"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
-          name: "BetterCamera ${{ env.VERSION }}"
+          name: "BetterCamera ${VERSION}"
           body_path: CHANGELOG.md
-          files: BetterCamera-cali-magnum-${{ env.VERSION }}.zip
+          files: BetterCamera-cali-magnum-${VERSION}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
