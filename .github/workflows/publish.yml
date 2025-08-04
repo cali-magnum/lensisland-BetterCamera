@@ -1,12 +1,13 @@
 name: Build & Publish BetterCamera
 
-# Grant GITHUB_TOKEN rights and allow package reads
+# Grant the built-in token the rights it needs to create releases + read packages
 permissions:
   contents: write
   packages: read
 
 on:
   push:
+    # Only run on semver tags like "0.0.1"
     tags:
       - '[0-9]+\.[0-9]+\.[0-9]+'
 
@@ -15,14 +16,15 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      # Make the tag name (e.g. "0.0.1") available as $VERSION
       VERSION: ${{ github.ref_name }}
 
     steps:
-      # 1) Checkout your code
-      - name: Checkout repo
+      # 1) Check out your code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Install .NET 8
+      # 2) Install .NET 8 SDK
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -49,19 +51,14 @@ jobs:
           </configuration>
           EOF
 
-      # 4) Restore & build using that config
+      # 4) Restore & build using that nuget.config
       - name: Restore dependencies
         run: dotnet restore BetterCamera/BetterCamera.csproj --configfile nuget.config
 
       - name: Build project
-        run: dotnet build BetterCamera/BetterCamera.csproj --configuration Release --no-restore
+        run: dotnet build --configuration Release BetterCamera/BetterCamera.csproj
 
-      # 5) Extract the version from the tag
-      - name: Get version from tag
-        id: get-version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-
-      # 6) Generate manifest.json
+      # 5) Generate manifest.json for Thunderstore
       - name: Create manifest.json
         run: |
           cat <<EOF > manifest.json
@@ -76,29 +73,16 @@ jobs:
           }
           EOF
 
-      # 7) Package into zip
+      # 6) Package into the ZIP (with EXACT version in filename)
       - name: Create Thunderstore ZIP
         run: |
           mkdir -p package/BepInEx/plugins
           cp BetterCamera/bin/Release/BetterCamera.dll package/BepInEx/plugins/
-          cp manifest.json package/
-          cp CHANGELOG.md package/ || true
-          cp icon.png package/ || true
+          cp icon.png LICENSE CHANGELOG.md manifest.json package/ || true
           cd package
           zip -r ../BetterCamera-cali-magnum-${VERSION}.zip .
 
-      # 8) Create GitHub Release and attach zip
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "BetterCamera ${VERSION}"
-          body_path: CHANGELOG.md
-          files: BetterCamera-cali-magnum-${VERSION}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 9) Upload to Thunderstore, fail on error, report HTTP status
+      # 7) Upload to Thunderstore (fail on HTTP error, report status)
       - name: Upload to Thunderstore
         run: |
           curl -f -sS -X POST "https://thunderstore.io/c/lens-island/api/experimental/package/create/" \
@@ -108,11 +92,13 @@ jobs:
                -F "categories=mods" \
                -w "\nHTTP_STATUS:%{http_code}\n"
 
-      # 10) Quick verification
-      - name: Verify upload
-        run: |
-          echo "Waiting 5s before verifying..."
-          sleep 5
-          curl -s "https://thunderstore.io/c/lens-island/api/v1/package/" | \
-            grep -q "BetterCamera" && echo "✅ Package found" || \
-            (echo "⚠️ Package not found" && exit 1)
+      # 8) Create GitHub Release using the same ZIP
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "BetterCamera ${{ env.VERSION }}"
+          body_path: CHANGELOG.md
+          files: BetterCamera-cali-magnum-${{ env.VERSION }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
