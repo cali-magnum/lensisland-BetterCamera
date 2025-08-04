@@ -89,8 +89,8 @@ jobs:
         curl -X POST "https://thunderstore.io/api/experimental/package/create/" \
              -H "Authorization: ${{ secrets.THUNDERSTORE_API_KEY }}" \
              -F "file=@BetterCamera-cali-magnum-${VERSION}.zip" \
-             -F "community=Lens-Island" \
-             -F "categories=misc"
+             -F "community=lens-island" \
+             -F "categories=misc,mods"
 
     # 9) create GitHub Release & attach the same zip
     - name: Create GitHub Release
