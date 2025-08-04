@@ -78,7 +78,7 @@ jobs:
       - name: Create Thunderstore ZIP
         run: |
           mkdir -p package/BepInEx/plugins
-          cp BetterCamera/bin/Release/netstandard2.1/BetterCamera.dll package/BepInEx/plugins/
+          cp BetterCamera/bin/Release/BetterCamera.dll package/BepInEx/plugins/
           cp icon.png LICENSE CHANGELOG.md manifest.json package/
           cd package
           zip -r ../BetterCamera-cali-magnum-${VERSION}.zip .
