@@ -1,12 +1,11 @@
 name: Build & Publish BetterCamera
 
-# Trigger on bare semver tags
 on:
   push:
+    # only run on semver tags like "0.0.1"
     tags:
       - '[0-9]+\.[0-9]+\.[0-9]+'
 
-# Grant rights: create releases & read from GitHub Packages
 permissions:
   contents: write
   packages: read
@@ -16,44 +15,41 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Make the tag (e.g. "0.1.2") available as $VERSION
       VERSION: ${{ github.ref_name }}
 
     steps:
-      # 1) Check out the repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2) Install .NET 8
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      # 3) Register the GitHub Packages feed so LensIsland.GameLibs can restore
-      - name: Add GitHub Packages feed
+      - name: Configure GitHub Packages feed
         run: |
-          dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
-            --name github-csh \
-            --username cali-magnum \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --store-password-in-clear-text
+          # only add the csh feed if it's not already in the list
+          if ! dotnet nuget list source | grep -q 'github-csh'; then
+            dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
+              --name github-csh \
+              --username cali-magnum \
+              --password "${{ secrets.GITHUB_TOKEN }}" \
+              --store-password-in-clear-text
+          fi
 
-      # 4) Restore & build your BepInEx plugin
       - name: Restore dependencies
         run: dotnet restore BetterCamera/BetterCamera.csproj
 
       - name: Build plugin DLL
-        run: dotnet build BetterCamera/BetterCamera.csproj \
-              --configuration Release \
-              --no-restore \
-              /p:Version=${{ env.VERSION }}
+        run: |
+          dotnet build BetterCamera/BetterCamera.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:Version=${{ env.VERSION }}
 
-      # 5) Install the official Thunderstore CLI
       - name: Install tcli (Thunderstore CLI)
         run: dotnet tool install --tool-path ./tools tcli
 
-      # 6) Generate manifest.json for packaging
       - name: Create manifest.json
         run: |
           cat > manifest.json <<EOF
@@ -68,11 +64,9 @@ jobs:
           }
           EOF
 
-      # 7) Build the ZIP with tcli
       - name: Create Thunderstore ZIP
         run: ./tools/tcli build --package-version "${VERSION}"
 
-      # 8) Publish to Thunderstore
       - name: Publish to Thunderstore
         run: |
           if [ -z "${{ secrets.THUNDERSTORE_API_KEY }}" ]; then
@@ -83,7 +77,6 @@ jobs:
             --package-version "${VERSION}" \
             --token "${{ secrets.THUNDERSTORE_API_KEY }}"
 
-      # 9) Create a GitHub Release with the same ZIP
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
