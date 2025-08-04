@@ -48,9 +48,7 @@ jobs:
         run: dotnet restore BetterCamera/BetterCamera.csproj --configfile nuget.config
 
       - name: Build project
-        run: dotnet build BetterCamera/BetterCamera.csproj \
-              --configuration Release \
-              --no-restore
+        run: dotnet build --no-restore --configuration Release BetterCamera/BetterCamera.csproj
 
       # --------------------------------------------------------------------------------
       # 3) Grab the tag name (e.g. "0.0.1") into $VERSION
