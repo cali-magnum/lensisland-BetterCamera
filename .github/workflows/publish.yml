@@ -85,8 +85,9 @@ jobs:
       # 7) Upload to Thunderstore (fail on HTTP error, report status)
       - name: Upload to Thunderstore
         run: |
-          curl -f -sS -X POST "https://thunderstore.io/c/lens-island/api/experimental/package/create/" \
+          curl -f -sS -X POST "https://thunderstore.io/api/experimental/package/create/" \
                -H "Authorization: ${{ secrets.THUNDERSTORE_API_KEY }}" \
+               -F "community=lens-island" \
                -F "file=@BetterCamera-cali-magnum-${VERSION}.zip" \
                -F "categories=misc" \
                -F "categories=mods" \
