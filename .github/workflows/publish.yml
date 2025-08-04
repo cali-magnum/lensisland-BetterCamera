@@ -1,4 +1,4 @@
-name: Build and Publish to Thunderstore and GitHub Releases
+name: Build and Publish BetterCamera
 
 on:
   push:
@@ -10,60 +10,67 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '8.0.x'
+
+      - name: Add NuGet sources
+        run: |
+          dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
+          dotnet nuget add source https://nuget.bepinex.dev/v3/index.json --name BepInEx
+          dotnet nuget add source https://nuget.samboy.dev/v3/index.json --name samboy
+          dotnet nuget add source https://nuget.pkg.github.com/csh/index.json --name GitHub-csh --username cali-magnum --password ${{ secrets.GITHUB_TOKEN }}
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore BetterCamera/BetterCamera.csproj
 
-      - name: Build solution
-        run: dotnet build --configuration Release --no-restore
+      - name: Build project
+        run: dotnet build BetterCamera/BetterCamera.csproj --configuration Release --no-restore
+
+      - name: Extract tag version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF##*/}" >> $GITHUB_ENV
 
       - name: Create manifest.json
         run: |
-          VERSION=${GITHUB_REF_NAME}
-          cat > manifest.json << EOL
+          cat <<EOF > manifest.json
           {
-            "namespace": "cali_magnum",
             "name": "BetterCamera",
-            "version_number": "$VERSION",
-            "description": "Removes the ''auto-snap-back'' behavior of the camera pitch and allows more camera control",
+            "version_number": "${VERSION}",
             "website_url": "https://github.com/cali-magnum/lensisland-BetterCamera",
-            "dependencies": [
-              "BepInEx-BepInExPack_LensIsland-5.4.2303"
-            ]
+            "description": "Improved camera controls for Len's Island.",
+            "dependencies": ["BepInEx-BepInExPack_LensIsland-5.4.2303"]
           }
-          EOL
+          EOF
 
-      - name: Create Thunderstore package
+      - name: Create package zip
         run: |
           mkdir -p package/BepInEx/plugins
-          cp BetterCamera/bin/Release/BetterCamera.dll package/BepInEx/plugins/
-          cp icon.png package/
+          cp BetterCamera/bin/Release/netstandard2.1/BetterCamera.dll package/BepInEx/plugins/
           cp LICENSE package/
+          cp CHANGELOG.md package/
           cp manifest.json package/
-          cd package && zip -r ../BetterCamera-cali-magnum-${GITHUB_REF_NAME}.zip .
+          cd package
+          zip -r ../BetterCamera-cali-magnum-${VERSION}.zip .
 
       - name: Upload to Thunderstore
-        uses: GreenTF/upload-thunderstore-package@v2
-        with:
-          namespace: "cali_magnum"
-          name: "BetterCamera"
-          version: "${GITHUB_REF_NAME}"
-          description: "Removes the ''auto-snap-back'' behavior of the camera pitch and allows more camera control"
-          categories: "mods,misc,tools"
-          communities: "lens-island"
-          token: ${{ secrets.THUNDERSTORE_API_KEY }}
-          file: "BetterCamera-cali-magnum-${GITHUB_REF_NAME}.zip"
+        run: |
+          curl -X POST "https://thunderstore.io/api/experimental/package/create/" \
+          -H "Authorization: ${{ secrets.THUNDERSTORE_API_KEY }}" \
+          -F "file=@BetterCamera-cali-magnum-${VERSION}.zip" \
+          -F "community=Lens-Island" \
+          -F "categories=misc"
 
-      - name: Upload to GitHub Releases
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: BetterCamera-cali-magnum-${GITHUB_REF_NAME}.zip
+          tag_name: ${{ github.ref }}
+          name: "BetterCamera ${{ env.VERSION }}"
+          body_path: CHANGELOG.md
+          files: BetterCamera-cali-magnum-${{ env.VERSION }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
