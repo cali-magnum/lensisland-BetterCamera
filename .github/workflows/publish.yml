@@ -3,63 +3,68 @@ name: Build and Publish BetterCamera
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+\.[0-9]+\.[0-9]+'
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Add NuGet sources
+      # --------------------------------------------------------------------------------
+      # 1) Generate a nuget.config that includes your GH package feed + PAT
+      # --------------------------------------------------------------------------------
+      - name: Create temporary nuget.config
         run: |
-          # nuget.org
-          if ! dotnet nuget list source | grep -q 'https://api.nuget.org/v3/index.json'; then
-            dotnet nuget add source https://api.nuget.org/v3/index.json \
-              --name nuget.org
-          fi
+          cat > nuget.config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+              <add key="BepInEx"   value="https://nuget.bepinex.dev/v3/index.json" />
+              <add key="samboy"    value="https://nuget.samboy.dev/v3/index.json" />
+              <add key="GitHub-csh" value="https://nuget.pkg.github.com/csh/index.json" />
+            </packageSources>
+            <packageSourceCredentials>
+              <GitHub-csh>
+                <add key="Username"          value="cali-magnum" />
+                <add key="ClearTextPassword" value="${{ secrets.GH_PACKAGES_TOKEN }}" />
+              </GitHub-csh>
+            </packageSourceCredentials>
+          </configuration>
+          EOF
 
-          # BepInEx feed
-          if ! dotnet nuget list source | grep -q 'https://nuget.bepinex.dev/v3/index.json'; then
-            dotnet nuget add source https://nuget.bepinex.dev/v3/index.json \
-              --name BepInEx
-          fi
-
-          # samboy.dev feed
-          if ! dotnet nuget list source | grep -q 'https://nuget.samboy.dev/v3/index.json'; then
-            dotnet nuget add source https://nuget.samboy.dev/v3/index.json \
-              --name samboy
-          fi
-
-          # GitHub Packages (LensIsland.GameLibs)
-          if ! dotnet nuget list source | grep -q 'https://nuget.pkg.github.com/csh/index.json'; then
-            dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
-              --name GitHub-csh \
-              --username cali-magnum \
-              --password "${{ secrets.GH_PACKAGES_TOKEN }}" \
-              --store-password-in-clear-text
-          fi
-
+      # --------------------------------------------------------------------------------
+      # 2) Restore & build using that nuget.config
+      # --------------------------------------------------------------------------------
       - name: Restore dependencies
-        run: dotnet restore BetterCamera/BetterCamera.csproj
+        run: dotnet restore BetterCamera/BetterCamera.csproj --configfile nuget.config
 
       - name: Build project
-        run: dotnet build BetterCamera/BetterCamera.csproj --configuration Release --no-restore
+        run: dotnet build BetterCamera/BetterCamera.csproj \
+              --configuration Release \
+              --no-restore
 
+      # --------------------------------------------------------------------------------
+      # 3) Grab the tag name (e.g. "0.0.1") into $VERSION
+      # --------------------------------------------------------------------------------
       - name: Extract version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF##*/}" >> $GITHUB_ENV
+        id: extract
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
+      # --------------------------------------------------------------------------------
+      # 4) Generate manifest.json on the fly
+      # --------------------------------------------------------------------------------
       - name: Create manifest.json
         run: |
-          cat <<EOF > manifest.json
+          cat > manifest.json <<EOF
           {
             "name": "BetterCamera",
             "version_number": "${VERSION}",
@@ -69,14 +74,20 @@ jobs:
           }
           EOF
 
-      - name: Create Thunderstore package
+      # --------------------------------------------------------------------------------
+      # 5) Package it all up
+      # --------------------------------------------------------------------------------
+      - name: Create Thunderstore ZIP
         run: |
           mkdir -p package/BepInEx/plugins
           cp BetterCamera/bin/Release/netstandard2.1/BetterCamera.dll package/BepInEx/plugins/
-          cp LICENSE CHANGELOG.md manifest.json icon.png package/
+          cp icon.png LICENSE CHANGELOG.md manifest.json package/
           cd package
           zip -r ../BetterCamera-cali-magnum-${VERSION}.zip .
 
+      # --------------------------------------------------------------------------------
+      # 6) Upload to Thunderstore
+      # --------------------------------------------------------------------------------
       - name: Upload to Thunderstore
         run: |
           curl -X POST "https://thunderstore.io/api/experimental/package/create/" \
@@ -85,10 +96,13 @@ jobs:
             -F "community=Lens-Island" \
             -F "categories=mods,misc"
 
+      # --------------------------------------------------------------------------------
+      # 7) Create a GitHub Release and attach the same ZIP
+      # --------------------------------------------------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
           name: "BetterCamera ${VERSION}"
           body_path: CHANGELOG.md
           files: BetterCamera-cali-magnum-${VERSION}.zip
