@@ -20,11 +20,18 @@ jobs:
 
       - name: Add NuGet sources
         run: |
-          dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org
-          dotnet nuget add source https://nuget.bepinex.dev/v3/index.json --name BepInEx
-          dotnet nuget add source https://nuget.samboy.dev/v3/index.json --name samboy
-          dotnet nuget add source https://nuget.pkg.github.com/csh/index.json --name GitHub-csh --username cali-magnum --password ${{ secrets.GITHUB_TOKEN }}
-
+          dotnet nuget add source https://api.nuget.org/v3/index.json \
+            --name nuget.org --skip-duplicate
+          dotnet nuget add source https://nuget.bepinex.dev/v3/index.json \
+            --name BepInEx --skip-duplicate
+          dotnet nuget add source https://nuget.samboy.dev/v3/index.json \
+            --name samboy --skip-duplicate
+          dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
+            --name GitHub-csh \
+            --username cali-magnum \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --skip-duplicate
+            
       - name: Restore dependencies
         run: dotnet restore BetterCamera/BetterCamera.csproj
 
