@@ -1,52 +1,45 @@
-name: Publish BetterCamera
+name: Build & Publish BetterCamera
 
+# Trigger on bare semver tags
 on:
-  workflow_call:
-    inputs:
-      skip_thunderstore_publish:
-        description: "Skip publishing to Thunderstore (useful for testing or GitHub-only releases)"
-        required: false
-        type: boolean
-        default: false
-      package_version:
-        description: "SemVer version to build & publish (e.g. 0.1.0)"
-        required: true
-        type: string
-    secrets:
-      THUNDERSTORE_API_KEY:
-        description: "Your Thunderstore API key (set this in Settings → Secrets)"
-        required: true
+  push:
+    tags:
+      - '[0-9]+\.[0-9]+\.[0-9]+'
+
+# Grant rights: create releases & read from GitHub Packages
+permissions:
+  contents: write
+  packages: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write    # to create the GitHub Release + upload assets
-      packages: read     # to restore from GitHub Packages
+    env:
+      # Make the tag (e.g. "0.1.2") available as $VERSION
+      VERSION: ${{ github.ref_name }}
 
     steps:
-      # 1) grab your code
-      - name: Check out
+      # 1) Check out the repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2) install .NET 8
+      # 2) Install .NET 8
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      # 3) register GitHub Packages feed for LensIsland.GameLibs
-      - name: Add GitHub Packages source
+      # 3) Register the GitHub Packages feed so LensIsland.GameLibs can restore
+      - name: Add GitHub Packages feed
         run: |
-          dotnet nuget add source \
+          dotnet nuget add source https://nuget.pkg.github.com/csh/index.json \
+            --name github-csh \
             --username cali-magnum \
             --password "${{ secrets.GITHUB_TOKEN }}" \
-            --store-password-in-clear-text \
-            --name github-csh \
-            https://nuget.pkg.github.com/csh/index.json
+            --store-password-in-clear-text
 
-      # 4) restore & build your plugin
+      # 4) Restore & build your BepInEx plugin
       - name: Restore dependencies
         run: dotnet restore BetterCamera/BetterCamera.csproj
 
@@ -54,19 +47,19 @@ jobs:
         run: dotnet build BetterCamera/BetterCamera.csproj \
               --configuration Release \
               --no-restore \
-              /p:Version=${{ inputs.package_version }}
+              /p:Version=${{ env.VERSION }}
 
-      # 5) install the official Thunderstore CLI
-      - name: Install Thunderstore CLI (tcli)
+      # 5) Install the official Thunderstore CLI
+      - name: Install tcli (Thunderstore CLI)
         run: dotnet tool install --tool-path ./tools tcli
 
-      # 6) create manifest.json for the package
-      - name: Generate manifest.json
+      # 6) Generate manifest.json for packaging
+      - name: Create manifest.json
         run: |
           cat > manifest.json <<EOF
           {
             "name": "BetterCamera",
-            "version_number": "${{ inputs.package_version }}",
+            "version_number": "${VERSION}",
             "website_url": "https://github.com/cali-magnum/lensisland-BetterCamera",
             "description": "Removes the 'auto-snap-back' behavior of the camera pitch and allows more camera control",
             "dependencies": [
@@ -75,28 +68,27 @@ jobs:
           }
           EOF
 
-      # 7) let tcli build the zip into build/
+      # 7) Build the ZIP with tcli
       - name: Create Thunderstore ZIP
-        run: ./tools/tcli build --package-version "${{ inputs.package_version }}"
+        run: ./tools/tcli build --package-version "${VERSION}"
 
-      # 8) publish to Thunderstore (unless skipped)
+      # 8) Publish to Thunderstore
       - name: Publish to Thunderstore
-        if: inputs.skip_thunderstore_publish != true
         run: |
           if [ -z "${{ secrets.THUNDERSTORE_API_KEY }}" ]; then
-            echo "❌ THUNDERSTORE_API_KEY is not set!"
+            echo "❌ THUNDERSTORE_API_KEY not set!"
             exit 1
           fi
           ./tools/tcli publish \
-            --package-version "${{ inputs.package_version }}" \
+            --package-version "${VERSION}" \
             --token "${{ secrets.THUNDERSTORE_API_KEY }}"
 
-      # 9) create a GitHub Release and attach the exact same zip
+      # 9) Create a GitHub Release with the same ZIP
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.package_version }}
-          name: "BetterCamera ${{ inputs.package_version }}"
+          tag_name: ${{ env.VERSION }}
+          name: "BetterCamera ${{ env.VERSION }}"
           body_path: CHANGELOG.md
           files: build/*.zip
         env:

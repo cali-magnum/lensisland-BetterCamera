@@ -4,7 +4,7 @@ repository = "https://thunderstore.io"
 [package]
 namespace     = "cali_magnum"
 name          = "BetterCamera"
-versionNumber = "0.1.9"
+versionNumber = "0.2.0"
 description   = "Removes the ''auto-snap-back'' behavior of the camera pitch and allows more camera control"
 websiteUrl    = "https://github.com/cali-magnum/lensisland-BetterCamera"
 
