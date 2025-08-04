@@ -1,0 +1,58 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.1</TargetFramework>
+		<AssemblyName>BetterCamera</AssemblyName>
+		<Product>BetterCamera</Product>
+		<Authors>cali-magnum</Authors>
+		<Version>0.0.1</Version>
+		<LangVersion>latest</LangVersion>
+		<PlatformTarget>x64</PlatformTarget>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<RestoreAdditionalProjectSources>
+			https://api.nuget.org/v3/index.json;
+			https://nuget.bepinex.dev/v3/index.json;
+			https://nuget.samboy.dev/v3/index.json;
+		</RestoreAdditionalProjectSources>
+		<RootNamespace>BetterCamera</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+		<PackageReference Include="BepInEx.Core" Version="5.*" />
+		<PackageReference Include="LensIsland.GameLibs" Version="2025.7.10-r.1" />
+		<PackageReference Include="DotNet.ReproducibleBuilds" Version="1.2.25" PrivateAssets="all" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
+		<PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+	</ItemGroup>
+
+	<!-- Single-line GamePath avoids embedded whitespace/newline -->
+	<PropertyGroup>
+		<GamePath Condition="'$(GamePath)' == ''">C:\Users\woodroach\AppData\Roaming\com.kesomannen.gale\lens-island\profiles\Default</GamePath>
+	</PropertyGroup>
+
+	<Target Name="CopyPluginToGame" AfterTargets="Build" Condition="'$(CI)' != 'true'">
+		<PropertyGroup>
+			<PluginOutputPath>$(OutputPath)\$(AssemblyName).dll</PluginOutputPath>
+			<BepInExPluginDir Condition="'$(BepInExPluginDir)' == ''">$(GamePath)\BepInEx\plugins\</BepInExPluginDir>
+			<ScriptEnginePath>$(BepInExPluginDir)\ScriptEngine.dll</ScriptEnginePath>
+		</PropertyGroup>
+
+		<Message Condition="Exists('$(ScriptEnginePath)')" Importance="high" Text="ScriptEngine detected" />
+
+		<PropertyGroup Condition="Exists('$(ScriptEnginePath)')">
+			<BepInExOutputDir>$(GamePath)\BepInEx\scripts\</BepInExOutputDir>
+		</PropertyGroup>
+		<PropertyGroup Condition="!Exists('$(ScriptEnginePath)')">
+			<BepInExOutputDir>$(GamePath)\BepInEx\plugins\</BepInExOutputDir>
+		</PropertyGroup>
+
+		<Message Importance="high" Text="Copying $(PluginOutputPath) to $(BepInExOutputDir)" />
+		<Copy SourceFiles="$(PluginOutputPath)" DestinationFolder="$(BepInExOutputDir)" SkipUnchangedFiles="true" />
+	</Target>
+
+</Project>
