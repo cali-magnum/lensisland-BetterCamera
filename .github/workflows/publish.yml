@@ -1,23 +1,33 @@
-name: Build & Publish BetterCamera
-
-# allow GH Action to create releases + read packages
-permissions:
-  contents: write
-  packages: read
+name: Publish BetterCamera
 
 on:
-  push:
-    # only run on plain semver tags like "0.0.1"
-    tags:
-      - '[0-9]+\.[0-9]+\.[0-9]+'
+  workflow_call:
+    inputs:
+      skip_thunderstore_publish:
+        description: "Skip publishing to Thunderstore (useful for testing or GitHub-only releases)"
+        required: false
+        type: boolean
+        default: false
+      package_version:
+        description: "SemVer version to build & publish (e.g. 0.1.0)"
+        required: true
+        type: string
+    secrets:
+      THUNDERSTORE_API_KEY:
+        description: "Your Thunderstore API key (set this in Settings → Secrets)"
+        required: true
 
 jobs:
-  build-and-publish:
+  publish:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write    # to create the GitHub Release + upload assets
+      packages: read     # to restore from GitHub Packages
+
     steps:
-      # 1) checkout your code
-      - name: Checkout
+      # 1) grab your code
+      - name: Check out
         uses: actions/checkout@v4
 
       # 2) install .NET 8
@@ -26,46 +36,37 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # 3) write a temporary nuget.config (so we can restore LensIsland.GameLibs)
-      - name: Create nuget.config
+      # 3) register GitHub Packages feed for LensIsland.GameLibs
+      - name: Add GitHub Packages source
         run: |
-          cat > nuget.config <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <add key="nuget.org"     value="https://api.nuget.org/v3/index.json" />
-              <add key="BepInEx"       value="https://nuget.bepinex.dev/v3/index.json" />
-              <add key="samboy.dev"    value="https://nuget.samboy.dev/v3/index.json" />
-              <add key="GitHub-csh"    value="https://nuget.pkg.github.com/csh/index.json" />
-            </packageSources>
-            <packageSourceCredentials>
-              <GitHub-csh>
-                <add key="Username"          value="cali-magnum" />
-                <add key="ClearTextPassword" value="\${{ secrets.GH_PACKAGES_TOKEN }}" />
-              </GitHub-csh>
-            </packageSourceCredentials>
-          </configuration>
-          EOF
+          dotnet nuget add source \
+            --username cali-magnum \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --store-password-in-clear-text \
+            --name github-csh \
+            https://nuget.pkg.github.com/csh/index.json
 
-      # 4) restore & build your plugin project
+      # 4) restore & build your plugin
       - name: Restore dependencies
-        run: dotnet restore BetterCamera/BetterCamera.csproj --configfile nuget.config
+        run: dotnet restore BetterCamera/BetterCamera.csproj
 
-      - name: Build project
-        run: dotnet build --configuration Release BetterCamera/BetterCamera.csproj
+      - name: Build plugin DLL
+        run: dotnet build BetterCamera/BetterCamera.csproj \
+              --configuration Release \
+              --no-restore \
+              /p:Version=${{ inputs.package_version }}
 
-      # 5) pull the tag name into $VERSION
-      - name: Get version from tag
-        id: getver
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      # 5) install the official Thunderstore CLI
+      - name: Install Thunderstore CLI (tcli)
+        run: dotnet tool install --tool-path ./tools tcli
 
-      # 6) generate the Thunderstore manifest.json
-      - name: Create manifest.json
+      # 6) create manifest.json for the package
+      - name: Generate manifest.json
         run: |
           cat > manifest.json <<EOF
           {
             "name": "BetterCamera",
-            "version_number": "${VERSION}",
+            "version_number": "${{ inputs.package_version }}",
             "website_url": "https://github.com/cali-magnum/lensisland-BetterCamera",
             "description": "Removes the 'auto-snap-back' behavior of the camera pitch and allows more camera control",
             "dependencies": [
@@ -74,32 +75,29 @@ jobs:
           }
           EOF
 
-      # 7) bundle into the exact ZIP Thunderstore expects
+      # 7) let tcli build the zip into build/
       - name: Create Thunderstore ZIP
-        run: |
-          mkdir -p package/BepInEx/plugins
-          cp BetterCamera/bin/Release/BetterCamera.dll package/BepInEx/plugins/
-          cp icon.png LICENSE CHANGELOG.md manifest.json package/
-          cd package
-          zip -r ../BetterCamera-cali-magnum-${VERSION}.zip .
+        run: ./tools/tcli build --package-version "${{ inputs.package_version }}"
 
-      # 8) upload that ZIP to Thunderstore’s experimental API
-      - name: Upload to Thunderstore
+      # 8) publish to Thunderstore (unless skipped)
+      - name: Publish to Thunderstore
+        if: inputs.skip_thunderstore_publish != true
         run: |
-          curl -f -sS -X POST "https://thunderstore.io/api/experimental/package/create/" \
-               -H "Authorization: ${{ secrets.THUNDERSTORE_API_KEY }}" \
-               -F "community=lens-island" \
-               -F "file=@BetterCamera-cali-magnum-${VERSION}.zip" \
-               -F "categories=misc,mods" \
-               -w "\nHTTP_STATUS:%{http_code}\n"
+          if [ -z "${{ secrets.THUNDERSTORE_API_KEY }}" ]; then
+            echo "❌ THUNDERSTORE_API_KEY is not set!"
+            exit 1
+          fi
+          ./tools/tcli publish \
+            --package-version "${{ inputs.package_version }}" \
+            --token "${{ secrets.THUNDERSTORE_API_KEY }}"
 
-      # 9) finally create a GitHub Release & attach the _same_ ZIP
+      # 9) create a GitHub Release and attach the exact same zip
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "BetterCamera ${{ env.VERSION }}"
+          tag_name: ${{ inputs.package_version }}
+          name: "BetterCamera ${{ inputs.package_version }}"
           body_path: CHANGELOG.md
-          files: BetterCamera-cali-magnum-${{ env.VERSION }}.zip
+          files: build/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
