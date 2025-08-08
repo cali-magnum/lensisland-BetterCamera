@@ -1,6 +1,6 @@
 # BetterCamera <img src="https://github.com/cali-magnum/lensisland-BetterCamera/raw/main/icon.png" align="right" width="80" />
 
-Removes the "auto-snap-back" behavior of the camera pitch and allows more camera control.
+Removes the "auto-snap-back" behavior of the camera pitch and allows more camera control for the video game **"Len's Island"**
 
 ## Features
 
